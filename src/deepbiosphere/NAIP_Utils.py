@@ -49,8 +49,8 @@ from types import SimpleNamespace
 CRS = SimpleNamespace(
     GBIF_CRS = 'EPSG:4326',
     BIOCLIM_CRS ='EPSG:4326',
-    NAIP_CRS_1 = 'EPSG:26911',
-    NAIP_CRS_2 = 'EPSG:26910')
+    NAIP_CRS_1 = 'EPSG:26916',
+    NAIP_CRS_2 = 'EPSG:26917')
     
 # legal types of predictions to make
 # on a set of rasters
@@ -265,7 +265,7 @@ def predict_beta(preds, transform):
 
 # ---------- geopandas helper functions ---------- ##
 
-def get_state_outline(state, file=f"{paths.SHPFILES}gadm36_USA/gadm36_USA_1.shp"):
+def get_state_outline(state, file=f"{paths.SHPFILES}gadm41_USA/gadm41_USA_1.shp"):
     # get outline of us
     us1 = gpd.read_file(file) # the state's shapefiles
     stcol = [h.split('.')[-1].lower() for h in us1.HASC_1]
@@ -277,7 +277,7 @@ def get_state_outline(state, file=f"{paths.SHPFILES}gadm36_USA/gadm36_USA_1.shp"
 def load_naip_bounds(base_dir : str, state: str, year : str):
     return gpd.read_file(glob.glob(f"{base_dir}/naip_tiffs/{state}_shpfl_{year}/*.shp")[0])
 
-def find_rasters_point(gdf, point,  base_dir  : str):
+def find_rasters_point(gdf, point, base_dir : str):
     rasters = gdf[gdf.contains(point)]
     rasters = [f"{base_dir}/{fman.APFONAME[:5]}/{'_'.join(fman.FileName.split('_')[:-1])}.tif" for _, fman in rasters.iterrows()]
     return rasters
