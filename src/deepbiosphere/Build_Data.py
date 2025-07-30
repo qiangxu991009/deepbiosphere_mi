@@ -62,7 +62,7 @@ def sort_rasters(curr_clim, to_sort):
     return sortedras
     
     
-def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='ca'):
+def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='mi'):
     # TODO: only works for us, gadm at the moment..
     shpfile = naip.get_state_outline(state)
     ras_paths = load_rasters(base_dir, timeframe, ras_name)
@@ -86,7 +86,7 @@ def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timefra
 
 
 
-def get_bioclim_rasters(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='ca'):
+def get_bioclim_rasters(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='mi'):
     # TODO: only works for us, gadm at the moment..
     shpfile = naip.get_state_outline(state)
     # first, get raster files
@@ -317,7 +317,7 @@ def save_data(daset, year, state, means, tr_clus, te_clus, sp, gen, fam, daset_i
     files = [c for c in daset.columns if 'file' in c]
     clims = [c for c in daset.columns if 'bio' in c]
     # banded test train split
-    splits = [f"train_{i}" for i in range(10)] +[f"test_{i}" for i in range(10)]
+    splits = [col for col in daset.columns if col.startswith('train_') or col.startswith('test_')]
     tokeep = [idCol, latname, loname, 'unif_train_test',  'cluster_dist', 'len_overlap', 'cluster_assgn', 'species', 'family', 'genus', 'order', 'neighbor_dist', 'APFONAME', 'UTM'] + ids + names + epa_regions  + files + splits + clims
     daset[tokeep].to_csv(f"{filepath}.csv")
     # json can't serialize numpy dtypes, annoying...
@@ -787,10 +787,10 @@ def filter_raster_oob(daset):
     return daset
 
 # Basically copying code from below that returns back just the polygons for visualization
-def generate_split_polygons(lonmin=-125,
-                            lonmax=-114, 
-                            latmin=32, 
-                            latmax=42.1,
+def generate_split_polygons(lonmin=-90.5,
+                            lonmax=-82.1,
+                            latmin=41.5,
+                            latmax=48.5,
                            bandwidth=1):
     # these are a box around california
     # leaves a bit of a buffer around
@@ -799,25 +799,25 @@ def generate_split_polygons(lonmin=-125,
     # latmin, latmax=32,42.1
     # add buffer region around min, max latitude that's guaranteed to capture all
     # points in the state
-    strtlat, endlat = math.floor(latmin), math.floor(latmax)
+    strtlat, endlat =latmin, latmax
     # Check math!
     exclude_size = KM_2_DEG+KM_2_DEG*0.5 # max largest size of bioclim pixel is sqrt(2) ~1.5 km
     polys = {}
-    for i, lat in enumerate(range(strtlat, endlat, bandwidth)):
+    for i, lat in enumerate(np.arange(strtlat, endlat, bandwidth)):
 
         # polygon for below exclusion band
-        train_top  = [Point(lonmax, lat+1), Point(lonmax, latmax), Point(lonmin, latmax),  Point(lonmin, lat+1)]
+        train_top  = [Point(lonmax, lat+bandwidth), Point(lonmax, latmax), Point(lonmin, latmax),  Point(lonmin, lat+bandwidth)]
         train_top = Polygon(train_top)
         # polygon for above the exclusion band
         train_bot = [Point(lonmax, latmin), Point(lonmax, lat), Point(lonmin, lat),  Point(lonmin, latmin)]
         train_bot = Polygon(train_bot)
         # polygon for test locations
         # exclude_size is the buffer
-        test = [Point(lonmax, lat+exclude_size), Point(lonmax, lat+1-exclude_size), Point(lonmin, lat+1-exclude_size),  Point(lonmin, lat+exclude_size)]
+        test = [Point(lonmax, lat+exclude_size), Point(lonmax, lat+bandwidth-exclude_size), Point(lonmin, lat+bandwidth-exclude_size),  Point(lonmin, lat+exclude_size)]
         test = Polygon(test)
         exclude_bot = [Point(lonmax, lat), Point(lonmax, lat+exclude_size), Point(lonmin, lat+exclude_size),  Point(lonmin, lat)]
         exclude_bot =  Polygon(exclude_bot)
-        exclude_top = [Point(lonmax, lat+1-exclude_size), Point(lonmax, lat+1), Point(lonmin, lat+1),  Point(lonmin, lat+1-exclude_size)]
+        exclude_top = [Point(lonmax, lat+bandwidth-exclude_size), Point(lonmax, lat+bandwidth), Point(lonmin, lat+bandwidth),  Point(lonmin, lat+bandwidth-exclude_size)]
         exclude_top = Polygon(exclude_top)
 
         polys[f"band_{i}"] = {
@@ -828,11 +828,11 @@ def generate_split_polygons(lonmin=-125,
     return polys
 
 # make bands and exclusion zones
-def make_spatial_split(daset, latCol, 
-                       lonmin=-125, 
-                       lonmax=-114, 
-                       latmin=32, 
-                       latmax=42.1, 
+def make_spatial_split(daset, latCol,
+                       lonmin=-90.5,
+                       lonmax=-82.1,
+                       latmin=41.5,
+                       latmax=48.5,
                        bandwidth=1):
     # first, make sure we're in the right crs
     daset = daset.to_crs(naip.CRS.GBIF_CRS)
@@ -846,22 +846,22 @@ def make_spatial_split(daset, latCol,
     # from buffer radius above
     # want to start either at the 32 degree mark
     # or whatever latitude the most southern obs is
-    strtlat = max(latmin, math.floor(daset[latCol].min()))
+    strtlat = latmin
     # want to end at either the 42 degree mark
     # or if all points are more than a degree lower, that
-    endlat = min(math.floor(latmax), math.ceil(daset[latCol].max()))
-    for i, lat in enumerate(range(strtlat, endlat, 1)):
+    endlat = latmax
+    for i, lat in enumerate(np.arange(strtlat, endlat, bandwidth)):
         # Check
         exclude_size = KM_2_DEG+KM_2_DEG*0.5 # max largest size of bioclim pixel is sqrt(2) ~1.5 km
         # polygon for below exclusion band
-        train_top  = [Point(lonmax, lat+1), Point(lonmax, latmax), Point(lonmin, latmax),  Point(lonmin, lat+1)]
+        train_top  = [Point(lonmax, lat+bandwidth), Point(lonmax, latmax), Point(lonmin, latmax),  Point(lonmin, lat+bandwidth)]
         train_top = Polygon(train_top)
         # polygon for above the exclusion band
         train_bot = [Point(lonmax, latmin), Point(lonmax, lat), Point(lonmin, lat),  Point(lonmin, latmin)]
         train_bot = Polygon(train_bot)
         # polygon for test locations
         # exclude_size is the buffer
-        test = [Point(lonmax, lat+exclude_size), Point(lonmax, lat+1-exclude_size), Point(lonmin, lat+1-exclude_size),  Point(lonmin, lat+exclude_size)]
+        test = [Point(lonmax, lat+exclude_size), Point(lonmax, lat+bandwidth-exclude_size), Point(lonmin, lat+bandwidth-exclude_size),  Point(lonmin, lat+exclude_size)]
         test = Polygon(test)
         # get all the points inside train bands
         train_1 = daset[daset.intersects(train_bot)]
@@ -962,7 +962,7 @@ def remove_singletons_duplicates(daset, res):
 
 
 # generate the csv
-def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, threshold, rng, idCol, parallel, add_images, only_images, excl_dist,normalize, calculate_means, outline=f"{paths.SHPFILES}gadm36_USA/gadm36_USA_1.shp", to_keep=None):
+def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, threshold, rng, idCol, parallel, add_images, only_images, excl_dist,normalize, calculate_means, outline=f"{paths.SHPFILES}gadm41_USA/gadm41_USA_1.shp", to_keep=None):
     daset = pd.read_csv(dset_path, sep=sep, engine='python')
     pts = [Point(lon, lat) for lon, lat in zip(daset[loname], daset[latname])]
     # GBIF returns coordinates in WGS84 according to the API
@@ -986,7 +986,6 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
         'Magnoliopsida',
         'Pinopsida',
         'Polypodiopsida',
-        'Lycopodiopsida',
         'Ginkgoopsida'
     ]
     daset = daset[daset['class'].isin(vasculars)]
@@ -1041,6 +1040,13 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
         pool.join()
 # finally, moosh all the dataframes back together
 # theoretically, the indices should be respected...
+        target_crs = naip.CRS.NAIP_CRS_1
+        # Standardize CRS for all DataFrames
+        for i, df in enumerate(res_dfs):
+            if hasattr(df, 'crs') and df.crs is not None:
+                if df.crs != target_crs:
+                    print(f"Transforming DataFrame {i} from {df.crs} to {target_crs}")
+                    res_dfs[i] = df.to_crs(target_crs)
         daset = pd.concat(res_dfs)
         daset = gpd.GeoDataFrame(daset, geometry=daset.geometry)
     #if not only_images:
@@ -1077,7 +1083,7 @@ if __name__ == "__main__":
     args.add_argument('--loname', type=str, help='Name of the column that contains latitude information', default='decimalLongitude')
     args.add_argument('--sep', type=str, required=True, help='The separator used to delimeter the base dataset')
     args.add_argument('--year', type=str, help='What year of NAIP to use to build the dataset')
-    args.add_argument('--state', type=str, help='What state to build the dataset in', default='ca')
+    args.add_argument('--state', type=str, help='What state to build the dataset in', default='mi')
     args.add_argument('--normalize', type=str, help='How to normalize the bioclim variables', default='normalize', choices=['normalize', 'min_max', 'none'])
     args.add_argument('--calculate_means', action='store_true', help="If you wish to calculate the means and std deviation for the image dataset, set this flag. (WARNING: using this option can require up to 1.5 TiB RAM and 60 CPUs. We recommend using the pre-computed values or batch calculating the means offline.)")
     args.add_argument('--excl_dist', type=int, help='How far away to exclude data points in the uniform split', default=1300)
@@ -1099,6 +1105,10 @@ if __name__ == "__main__":
     if args.species_file is not None:
         with open(args.species_file, 'r') as f:
             species = json.load(f)
-        make_dataset(args.dset_path, args.daset_id, args.latname, args.loname, args.sep, args.year, args.state, args.threshold, rng, args.idCol, args.parallel, args.add_images, args.only_images, args.excl_dist, args.normalize, args.calculate_means, to_keep=species)
+        make_dataset(args.dset_path, args.daset_id, args.latname, args.loname, args.sep, args.year, args.state,
+                     args.threshold, rng, args.idCol, args.parallel, args.add_images, args.only_images, args.excl_dist,
+                     args.normalize, args.calculate_means, to_keep=species)
     else:
-        make_dataset(args.dset_path, args.daset_id, args.latname, args.loname, args.sep, args.year, args.state, args.threshold, rng, args.idCol, args.parallel, args.add_images, args.only_images, args.excl_dist, args.normalize, args.calculate_means)
+        make_dataset(args.dset_path, args.daset_id, args.latname, args.loname, args.sep, args.year, args.state,
+                     args.threshold, rng, args.idCol, args.parallel, args.add_images, args.only_images, args.excl_dist,
+                     args.normalize, args.calculate_means)
