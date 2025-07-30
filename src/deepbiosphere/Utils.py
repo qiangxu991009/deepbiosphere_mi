@@ -25,20 +25,19 @@ IMAGENET_CHANS = 3
 
 ## ---------- Paths to important directories ---------- ##
 
- paths = SimpleNamespace(
-    OCCS = '/your/path/here/',
-    SHPFILES = '/your/path/here/',
-    MODELS = '/your/path/here/',
-    IMAGES = '/your/path/here/',
-    RASTERS = '/your/path/here/',
-    BASELINES = '/your/path/here/',
-    RESULTS = '/your/path/here/',
-    MISC = '/your/path/here/',
-    DOCS = '/your/path/here/',
-    SCRATCH = '/your/path/here/',
-    RUNS = '/your/path/here/',
-    BLOB_ROOT = 'https://naipblobs.blob.core.windows.net/')
-
+paths = SimpleNamespace(
+    OCCS='D:/deepbiosphere_mi/PATHS/OCCS/',
+    SHPFILES='D:/deepbiosphere_mi/PATHS/SHPFILES/',
+    MODELS='D:/deepbiosphere_mi/PATHS/MODELS/',
+    IMAGES='D:/deepbiosphere_mi/PATHS/IMAGES/',
+    RASTERS='D:/deepbiosphere_mi/PATHS/RASTERS/',
+    BASELINES='D:/deepbiosphere_mi/PATHS/BASELINES/',
+    RESULTS='D:/deepbiosphere_mi/PATHS/RESULTS/',
+    MISC='D:/deepbiosphere_mi/PATHS/MISC/',
+    DOCS='D:/deepbiosphere_mi/PATHS/DOCS/',
+    SCRATCH='E:/SCRATCH/',
+    RUNS='D:/deepbiosphere_mi/PATHS/RUNS/',
+    BLOB_ROOT='https://naipblobs.blob.core.windows.net/')
 ## ---------- Base class for function type checking enum ---------- ##
 
 # hacky enum class to enable
