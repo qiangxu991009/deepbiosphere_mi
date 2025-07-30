@@ -17,7 +17,7 @@ import datetime
 # country code from https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3  [code].[state number]_1
 # where state number is the alphabetical sorting of states
 # TODO: use GADM to resolve state / country names to their administrative area ids
-def request_gbif_records(gbif_usr, email, taxon, start_date="2015", end_date="2022", area=['USA.5_1']):
+def request_gbif_records(gbif_usr, email, taxon, start_date="2015", end_date="2025", area=['USA.23_1']):
 
     # confirm email roughly matches email shape
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
@@ -249,8 +249,8 @@ if __name__ == "__main__":
     args.add_argument('--gbif_email', type=str, required=True, help='Email address associated with gbif account', default=None)
     args.add_argument('--organism', type=str, required=True, help='What organism/s to download', choices=['bacteria', 'plant','animal','plantanimal'])
     args.add_argument('--start_date', type=str, help='Collect observations on and after this year', default='2015')
-    args.add_argument('--end_date', type=str, help='Collect observations on and before this year', default='2022')
-    args.add_argument('--area', type=str, help='GADM area code for where observations should be taken from', default=['USA.5_1'])
+    args.add_argument('--end_date', type=str, help='Collect observations on and before this year', default='2025')
+    args.add_argument('--area', type=str, help='GADM area code for where observations should be taken from', default=['USA.23_1'])
     args, _ = args.parse_known_args()
     
     request_gbif_records(args.gbif_user, args.gbif_email, args.organism, start_date=args.start_date, end_date=args.end_date, area=args.area)
