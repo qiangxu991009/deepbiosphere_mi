@@ -356,8 +356,8 @@ class OccurrenceDataset(TorchDataset):
         self.dataset_type = DatasetType[dataset_type]
         self.total_len = len(daset)
         # for when using remote sensing data, read in NAIP statistics
-        self.mean = metadata.dataset_means[f"naip_{year}"]['means']
-        self.std = metadata.dataset_means[f"naip_{year}"]['stds']
+        self.mean = metadata.dataset_means[f"{state}_naip_{year}"]['means']
+        self.std = metadata.dataset_means[f"{state}_naip_{year}"]['stds']
         # only relevant for cases where remote sensing data used
         self.augment = Augment[augment]
         self.len_dset = len(daset)
