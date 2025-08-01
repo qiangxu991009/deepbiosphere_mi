@@ -353,9 +353,9 @@ def save_data(daset, year, state, means, tr_clus, te_clus, sp, gen, fam, daset_i
 
 # gonna not do type hints for now, just put it in the docstring instead as it's too complicated with
 # the interpreter complaining...
-def calculate_means_parallel(rasters, procid, lock, year: str, write_file):
+def compute_means_parallel(rasters, procid, lock, year: str, state: str, write_file):
     """
-    calculate_means_parallel g
+    compute_means_parallel
 
     _extended_summary_
 
@@ -386,17 +386,17 @@ def calculate_means_parallel(rasters, procid, lock, year: str, write_file):
             prog.update(1)
     # write to file if set
     if write_file:
-        fname = f'{paths.MISC}means_{year}_{procid}.json'
+        fname = f'{paths.MISC}{state}_means_{year}_{procid}.json'
         with open(fname, 'w') as f:
             json.dump({'means' : means, 'stds' : stds, "files" : rasters }, f)
     with lock:
         prog.close()
     return means, stds
 
-def calculate_means(tiff_dset_name, parallel, year, rasters=None, write_file=False):
+def compute_means(tiff_dset_name, parallel, year, state, rasters=None, write_file=False):
    # Decision: going to do it across all satellite image, not all images in the dataset
     # load in previously generated means
-    f = f"{paths.OCCS}dataset_means.json"
+    f = f"{paths.MEANS}dataset_means.json"
     with open(f, 'r') as fp:
         daset_means =  json.load(fp)
     if rasters is None:
@@ -407,7 +407,7 @@ def calculate_means(tiff_dset_name, parallel, year, rasters=None, write_file=Fal
 # parallel process the rasters
     lock = multiprocessing.Manager().Lock()
     pool =  multiprocessing.Pool(parallel)
-    res_async = [pool.apply_async(calculate_means_parallel, args=(ras, i, lock, year, write_file)) for i, ras in enumerate(ras_pars)]
+    res_async = [pool.apply_async(compute_means_parallel, args=(ras, i, lock, year, state, write_file)) for i, ras in enumerate(ras_pars)]
     res_dfs = [r.get() for r in res_async]
     pool.close()
     pool.join()
@@ -422,8 +422,8 @@ def calculate_means(tiff_dset_name, parallel, year, rasters=None, write_file=Fal
     print(len(means), len(stds), mean.shape, std.shape)
     mean = mean.tolist()
     std = std.tolist()
-    daset_means[f"naip_{year}"]['means'] = mean
-    daset_means[f"naip_{year}"]['stds'] = std
+    daset_means[f"{state}_naip_{year}"]['means'] = mean
+    daset_means[f"{state}_naip_{year}"]['stds'] = std
     return daset_means
 
 def map_key(df, key, new_key=None):
@@ -1058,9 +1058,11 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
     daset, sp,gen,fam = map_to_index(daset)
     # get the means for this naip dataset
     if calculate_means:
-        means = calculate_means(tiff_dset_name, parallel, args.year)
+        means = compute_means(tiff_dset_name, parallel, args.year, args.state)
     else:
-        means = None
+        f = f"{paths.MEANS}dataset_means.json"
+        with open(f, 'r') as fp:
+            means =  json.load(fp)
     # and finally save everything out to disk
     save_data(daset, year, state, means, train_clusters, test_clusters, sp, gen,fam, daset_id, count_spec, count_gen, count_fam, idCol, latname, loname, normalize, parallel, threshold, excl_dist)
 

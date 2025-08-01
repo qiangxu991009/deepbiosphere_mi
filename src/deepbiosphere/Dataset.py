@@ -238,9 +238,17 @@ class DeepbioDataset(TorchDataset):
         self.dataset_type = DatasetType[dataset_type]
         self.total_len = len(daset)
         # for when using remote sensing data, read in NAIP statistics
-        # TODO: change depending on your pretraining
-        self.mean = metadata.dataset_means[f"naip_{year}"]['means']
-        self.std = metadata.dataset_means[f"naip_{year}"]['stds']
+        # TODO: change naip_year depending on your pretraining
+        if metadata.dataset_means[f"naip_{year}"] is not None:
+            self.mean = metadata.dataset_means[f"{state}_naip_{year}"]['means']
+            self.std = metadata.dataset_means[f"{state}_naip_{year}"]['stds']
+        else:
+            # default is to use average NAIP pixels across CA to normalize
+            f = f"{paths.MEANS}dataset_means.json"
+            with open(f, 'r') as fp:
+                means =  json.load(fp)
+            self.mean = means[f"ca_naip_{year}"]['means']
+            self.std = means[f"ca_naip_{year}"]['stds']
         self.ids = daset[metadata.idCol]
         # only relevant for cases where remote sensing data used
         self.augment = Augment[augment]
