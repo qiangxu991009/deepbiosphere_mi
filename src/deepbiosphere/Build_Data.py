@@ -47,14 +47,17 @@ def load_rasters(base_dir, timeframe='current', ras_name='wc_30s_current'):
     # first, get raster files
     # always grabs standard WSG84 version which starts with b for bioclim
     rasters = f"{base_dir}bioclim_{timeframe}/{ras_name}/wc*bio*.tif"
+    # TODO: don't rely on glob, sort independently!!
+    # ras_paths = sorted(glob.glob(rasters))
     ras_paths = glob.glob(rasters)
     if len(ras_paths) != 19:
         raise FileNotFoundError(f"only {len(ras_paths)} files found for {ras_name}!")
     return ras_paths
-    
-def sort_rasters(curr_clim, to_sort):
+
+
+def sort_rasters(corr_order, to_sort):
     sortedras = []
-    for cras in curr_clim:
+    for cras in corr_order:
         curr = cras.split('_')[-1]
         for sras in to_sort:
             if sras.split('_')[-1] == curr:
@@ -62,14 +65,11 @@ def sort_rasters(curr_clim, to_sort):
     return sortedras
     
     
-def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='ca'):
-    # TODO: only works for us, gadm at the moment..
-    shpfile = naip.get_state_outline(state)
-    ras_paths = load_rasters(base_dir, timeframe, ras_name)
+def get_bioclim_means(training_ras, shpfile, crs):
     means = []
     stds = []
     # then load in rasters
-    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f"calculating means of {ras_name} bioclim rasters"):
+    for raster in tqdm(training_ras, total=len(training_ras), desc=f"grabbing means of wc_30s_current bioclim rasters"):
         # load in raster
         src = rasterio.open(raster)
         # got to make sure it's all in the same crs
@@ -85,22 +85,23 @@ def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timefra
     return means, stds
 
 
-
-def get_bioclim_rasters(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='ca'):
-    # TODO: only works for us, gadm at the moment..
+# TODO: turn rasters into data type instead of list
+def get_bioclim_rasters(base_dir=paths.RASTERS, train_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, state='ca'):
+    
     shpfile = naip.get_state_outline(state)
+    # get current day rasters for adjusting means to training data
+    training_ras = load_rasters(train_dir)
     # first, get raster files
-    # always grabs standard WSG84 version which starts with b for bioclim
     ras_paths = load_rasters(base_dir, timeframe, ras_name)
-    # sort rasters to same order as current bioclim
-    ras_paths = sort_rasters(load_rasters(base_dir), ras_paths)
-    # get means from current bioclim (the default for this fn)
-    means, stds = get_bioclim_means()
+    # sort rasters to same order as training rasters
+    ras_paths = sort_rasters(training_ras, ras_paths)
+    # get means from bioclim used to train the model
+    means, stds = get_bioclim_means(training_ras, shpfile, crs)
     ras_agg = []
     transfs = []
     # then load in rasters
     i = 0
-    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f" loading in {ras_name} bioclim rasters"):
+    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f"prepping {ras_name} bioclim rasters"):
         # load in raster
         src = rasterio.open(raster)
         # got to make sure it's all in the same crs
@@ -590,7 +591,6 @@ def make_images(daset:gpd.GeoDataFrame, year, tiff_dset_name, idCol='gbifID'):
                 daset = daset.to_crs(src.crs)
                 # x, y = daset.loc[i].geometry.xy
             # else:
-            # TODO: should be obs, not daset.loc?? 
             # x, y = daset.loc[i].geometry.xy
             x, y = obs.geometry.xy
             # get the row/col starting location of the point in the raster
@@ -1005,10 +1005,9 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
     daset = gpd.sjoin(daset, shps, predicate='within')
     # remove leftover index from ca shapefile
     del daset['index_right']
-    # get resolution depending on what year it is
-    # before 2015 was 1 meter, after was 60 cm
-    # res = 1.0 if year in ['2012', '2014'] else 0.6
-    res = 1.0 # TODO: going to see if more adjacent species increases accuracy for later years
+    # res magic number assures a radius of 256m for co-occurrence, duplicate obs filtering
+    # no matter underlying NAIP imagery resolution (tested to be better across years)
+    res = 1.0
     # this boolean allows us to just add the images if we so desire
     # keep only the points inside of rasters
     rasters = get_bioclim_rasters(state=state)

@@ -178,13 +178,13 @@ def check_bioclim(daset, metadata, state):
     bio_cols = [c for c in daset.columns if '_bio' in c]
     # TODO: ensure variables are in the same order each time?
     if len(bio_cols) > 1:
-        return torch.tensor(daset[bio_cols].values) # self.bioclim
+        return torch.tensor(daset[bio_cols].values), bio_cols # self.bioclim
     else:
-        return load_bioclim(daset, metadata, state)
+        return load_bioclim(daset, metadata, state, ras_names=True)
         
         
-def load_bioclim(daset, metadata, state): 
-    
+def load_bioclim(daset, metadata, state, ras_names=False): 
+
     rasters = build.get_bioclim_rasters(state=state)
     pts = [Point(lon, lat) for lon, lat in zip(daset[metadata.loName], daset[metadata.latName])]
     # GBIF returns coordinates in WGS84 according to the API
@@ -197,10 +197,17 @@ def load_bioclim(daset, metadata, state):
         # since we've confirmed all the rasters have identical
         # transforms, can just calculate the x,y coord once
         x,y = rasterio.transform.rowcol(rasters[0][1], *point.xy)
-        for j, (ras, transf,_,_) in enumerate(rasters):
+        for j, (ras, transf,ras_name,_) in enumerate(rasters):
             curr_bio.append(ras[0,x,y])
         bioclim.append(curr_bio)
-    return torch.tensor(np.squeeze(np.stack(bioclim)))
+        
+    if ras_names:
+        # raster item order is raster, transform, raster name, crs
+        # eventually will turn into a datatype to make access cleaner
+        bio_order = [r[2] for r in rasters]
+        return torch.tensor(np.squeeze(np.stack(bioclim))), bio_order
+    else:
+        return torch.tensor(np.squeeze(np.stack(bioclim)))
 
 # ---------- Actual dataset class ---------- #
 
@@ -265,7 +272,7 @@ class DeepbioDataset(TorchDataset):
             self.specs = torch.tensor(daset.species_id.tolist())
             self.gens = torch.tensor(daset.genus_id.tolist())
             self.fams = torch.tensor(daset.family_id.tolist())
-        self.bioclim = check_bioclim(daset, metadata, state)
+        self.bioclim, self.raster_order = check_bioclim(daset, metadata, state)
         self.nrasters = self.bioclim.shape[1]
         # finally, grab the files for reading the images
         self.imagekeys = daset[metadata.idCol].values

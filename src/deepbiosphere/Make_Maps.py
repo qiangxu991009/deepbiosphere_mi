@@ -58,13 +58,14 @@ def calculate_extra_attributes_parallel(procid,
                                         save_dir,
                                         pred_types,
                                         alpha_type,
+                                        loss_type,
                                        pred_specs : List[str],
                                        overwrite : bool =False):
     
     with lock:
         prog = tqdm(total=len(files), desc=f"Extra attributes tiff group #{procid}", unit=' tiffs', position=procid)
     for file in files:
-        calculate_extra_attributes(file, save_dir,pred_types,alpha_type, pred_specs, overwrite)
+        calculate_extra_attributes(file, save_dir,pred_types,alpha_type, loss_type, pred_specs, overwrite)
         with lock:
             prog.update(1)
     with lock:
@@ -75,6 +76,7 @@ def calculate_extra_attributes(file,
                                save_dir,
                                pred_types,
                                alpha_type,
+                               loss_type,
                               pred_specs : List[str],
                               overwrite=False):
 
@@ -87,7 +89,7 @@ def calculate_extra_attributes(file,
     out_bounds = rfile.bounds
     subdir = file.split('/')[-2]
     save_dir = f"{save_dir}{subdir}/"
-    save_name = f"{file.split('/')[-1].split('_raw_spec')[0]}"
+    save_name = f"{file.split('/')[-1].split(f'_{naip.Prediction.RAW.value}')[0]}"
     # typecheck predictions parameter
     pred_types = [naip.Prediction[pred_type] for pred_type in pred_types]
     alpha_type = naip.Alpha[alpha_type]
@@ -101,6 +103,7 @@ def calculate_extra_attributes(file,
         if pred_type is naip.Prediction.PER_SPEC:
             naip.save_tiff_per_species(save_dir=save_dir,
                                       save_name=save_name,
+                                      loss_type=loss_type,
                                       preds=pred,
                                       transf=pred_aff,
                                       crs=rfile.crs,
@@ -160,6 +163,7 @@ def additional_attributes_pertiff(parent_dir : str,
                                 exp_id : str,
                                 epoch : int,
                                 processes : int,
+                                loss_type : str,
                                 pred_types : List[str] = ['RAW'], 
                                 alpha_type : str = 'SUM',
                                 resolution : int = utils.IMG_SIZE,
@@ -168,7 +172,8 @@ def additional_attributes_pertiff(parent_dir : str,
 
     # get raw predictions from file
     save_dir = f"{paths.RASTERS}{parent_dir}/{pred_res}m_{pred_year}_{band}_{exp_id}_{epoch}/"
-    files = glob.glob(f"{save_dir}*/*raw_spec.tif")
+    files = glob.glob(f"{save_dir}*/*{naip.Prediction.RAW.value}.tif")
+    # files = glob.glob(f"{save_dir}*/*raw_spec.tif") # OLD TODO: remove!
     # otherwise read it from the open tiff
     # now get the actual predictions
     if processes > 1:
@@ -176,7 +181,7 @@ def additional_attributes_pertiff(parent_dir : str,
         lock = multiprocessing.Manager().Lock()
         pool =  multiprocessing.Pool(processes)
 
-        res_async = [pool.apply_async(calculate_extra_attributes_parallel, args=(i, lock, file, save_dir, pred_types, alpha_type, pred_specs, overwrite)) for i, file in enumerate(files)]
+        res_async = [pool.apply_async(calculate_extra_attributes_parallel, args=(i, lock, file, save_dir, pred_types, alpha_type, loss_type, pred_specs, overwrite)) for i, file in enumerate(files)]
         res_files = [r.get() for r in res_async]
         pool.close()
         pool.join()
@@ -186,6 +191,7 @@ def additional_attributes_pertiff(parent_dir : str,
                                        save_dir=save_dir,
                                        pred_types=pred_types,
                                        alpha_type=alpha_type,
+                                       loss_type=loss_type,
                                        pred_specs=pred_specs,
                                       overwrite=overwrite)
     
@@ -213,6 +219,7 @@ def predict_rasters_serial(rasters : List[str],
     else:
         device = torch.device(f"cuda:{device_no}")
         torch.cuda.set_device(device_no)
+    print(f'Using device {device}')
     if resolution < 20:
         raise ValueError("resolution needs to be at least 20 for model to work!")
 
@@ -288,7 +295,6 @@ def predict_rasters_parallel(procid : int,
     model = model.to(device)
     # don't forget eval mode
     model.eval()
-
     # set up TQDM for parallel
     with lock:
         prog = tqdm(total=len(rasters), desc=f"{pred_year} tiffs group #{procid}", unit=' tiffs', position=procid)
@@ -344,26 +350,27 @@ def predict_rasters_list(pred_outline : gpd.GeoDataFrame,
                          sat_res : int = None, # resolution to upsample sat imagery to
                          impute_climate = True,
                          clim_rasters = None,
-                         pred_specs : List[str] = None):
+                         pred_specs : List[str] = None,
+                        train_dir=paths.RASTERS):
 
     # type check
     pred_types = [naip.Prediction[pred_type] for pred_type in pred_types]
     save_dir = f"{paths.RASTERS}{parent_dir}/{pred_res}m_{pred_year}_{band}_{cfg.exp_id}_{epoch}/"
     # prep bounds
     naip_shp = naip.load_naip_bounds(paths.SHPFILES, state, pred_year)
-    pred_outline = pred_outline.to_crs(naip_shp.crs)# TODO: Return this!! .dissolve()
+    pred_outline = pred_outline.to_crs(naip_shp.crs).dissolve()
     # messy, but how to grab the right directory for the imagery
     sat_res = 60 if pred_year >= 2016 else 100
-    imagery_dir = paths.SCRATCH+f"naip/{pred_year}/{cfg.state}_{sat_res}cm_{pred_year}"
-    rasters = naip.find_rasters_polygon(naip_shp, pred_outline.geometry.iloc[0], imagery_dir)
+    scratch_res = "060" if pred_year >= 2016 else "100"
+    imagery_dir = paths.SCRATCH+f"naip/{pred_year}/{cfg.state}_{scratch_res}cm_{pred_year}"
+    rasters = naip.find_rasters_polygon(naip_shp, pred_outline.geometry.iloc[0], imagery_dir, pred_year)
     # if predictions already exist, ignore the pre-predicted files
-    already_done = [r.split('/')[-1].split(f'_{pred_year}')[0] for r in glob.glob(f"{save_dir}*/*_raw*.tif")]
+    already_done = [r.split('/')[-1].split(f'_{pred_year}')[0] for r in glob.glob(f"{save_dir}*/*{naip.Prediction.RAW.value}.tif")]
     rasters = [r for r in rasters if r.split('/')[-1].split(f'_{pred_year}')[0] not in already_done]
     print(f"{len(already_done)} rasters completed, {len(rasters)} more to go")
     # load in climate rasters if necessary
-    # TODO: make enum
     if clim_rasters == None:
-        clim_rasters = build.get_bioclim_rasters(ras_name=cfg.clim_ras, timeframe=cfg.clim_time, state=cfg.state)
+        clim_rasters = build.get_bioclim_rasters(ras_name=cfg.clim_ras, train_dir=train_dir, timeframe=cfg.clim_time, state=cfg.state)
 
     # set up save directory
     if not os.path.isdir(save_dir):
@@ -406,7 +413,6 @@ if __name__ == "__main__":
     args.add_argument('--alpha_type', type = str, help='What type of alpha prediction to make', choices =  naip.Alpha.valid(), default='SUM')
     args.add_argument('--exp_id', type=str, help='Experiment ID for model to use for mapmaking', required=True)
     args.add_argument('--band', type=str, help='Band which model to use for mapmaking was trained on', required=True)
-    # TODO: change loss and models to enums
     args.add_argument('--loss', type=str, help='Loss function used to train mapmaking model', required=True, choices=losses.Loss.valid())
     args.add_argument('--architecture', type=str, help='Architecture of mapmaking model', required=True, choices=mods.Model.valid())
     args.add_argument('-sp','--species_to_predict', nargs='+', help='Which species to save prediction maps for, in style "Genus species"', default=None)
@@ -419,6 +425,7 @@ if __name__ == "__main__":
     args.add_argument('--processes', type=int, help="How many worker processes to use for mapmaking", default=1)
     args.add_argument('--impute_climate', action='store_true', help="whether to impute the climate for locations with no bioclim coverage")
     args.add_argument('--clim_ras', type=str, help='Which bioclim raster to use', default='current')
+    args.add_argument('--bioclim_train_dir', type=str, help='Location of bioclim rasters used in training if different from inference time', default=paths.RASTERS)
     args.add_argument('--clim_time', type=str, help='Whether to do future or current climate', default='current', choices =['current', 'future'])
     args.add_argument('--add_preds', action='store_true', help="add additional prediction types instead of making new predictions")
     args.add_argument('--overwrite', action='store_true', help="whether to overwrite existing files when calculating additional attributes")
@@ -444,6 +451,7 @@ if __name__ == "__main__":
                              epoch  = args.epoch,
                              pred_types = args.pred_types,
                              alpha_type = args.alpha_type,
+                             loss_type = args.loss,
                              processes = args.processes,
                              pred_specs=args.species_to_predict,
                              overwrite=args.overwrite)
@@ -468,4 +476,5 @@ if __name__ == "__main__":
                              pred_res = args.pred_resolution,
                              sat_res = args.sat_resolution,
                              impute_climate = args.impute_climate,
-                             pred_specs = args.species_to_predict)
+                             pred_specs = args.species_to_predict,
+                             train_dir=args.bioclim_train_dir)
