@@ -37,6 +37,7 @@ IMAGENET_CHANS = 3
     DOCS = '/your/path/here/',
     SCRATCH = '/your/path/here/',
     RUNS = '/your/path/here/',
+    MEANS='metadata/', # this is a relative path to files in the github repo
     BLOB_ROOT = 'https://naipblobs.blob.core.windows.net/')
 
 ## ---------- Base class for function type checking enum ---------- ##
