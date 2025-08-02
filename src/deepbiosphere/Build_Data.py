@@ -87,9 +87,6 @@ def get_bioclim_means(training_ras, shpfile, crs):
 
 # TODO: turn rasters into data type instead of list
 def get_bioclim_rasters(base_dir=paths.RASTERS, train_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, state='mi'):
-
-
-def get_bioclim_rasters(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='mi'):
     # TODO: only works for us, gadm at the moment..
     shpfile = naip.get_state_outline(state)
     # get current day rasters for adjusting means to training data
