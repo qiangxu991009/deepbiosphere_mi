@@ -37,7 +37,6 @@ paths = SimpleNamespace(
     DOCS='D:/deepbiosphere_mi/PATHS/DOCS/',
     SCRATCH='E:/SCRATCH/',
     RUNS='D:/deepbiosphere_mi/PATHS/RUNS/',
-    MEANS='D:/deepbiosphere_mi/metadata/dataset_means.json',
     BLOB_ROOT='https://naipblobs.blob.core.windows.net/')
 ## ---------- Base class for function type checking enum ---------- ##
 

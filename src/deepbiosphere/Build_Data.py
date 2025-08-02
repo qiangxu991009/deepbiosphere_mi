@@ -47,17 +47,14 @@ def load_rasters(base_dir, timeframe='current', ras_name='wc_30s_current'):
     # first, get raster files
     # always grabs standard WSG84 version which starts with b for bioclim
     rasters = f"{base_dir}bioclim_{timeframe}/{ras_name}/wc*bio*.tif"
-    # TODO: don't rely on glob, sort independently!!
-    # ras_paths = sorted(glob.glob(rasters))
     ras_paths = glob.glob(rasters)
     if len(ras_paths) != 19:
         raise FileNotFoundError(f"only {len(ras_paths)} files found for {ras_name}!")
     return ras_paths
-
-
-def sort_rasters(corr_order, to_sort):
+    
+def sort_rasters(curr_clim, to_sort):
     sortedras = []
-    for cras in corr_order:
+    for cras in curr_clim:
         curr = cras.split('_')[-1]
         for sras in to_sort:
             if sras.split('_')[-1] == curr:
@@ -65,11 +62,14 @@ def sort_rasters(corr_order, to_sort):
     return sortedras
     
     
-def get_bioclim_means(training_ras, shpfile, crs):
+def get_bioclim_means(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='mi'):
+    # TODO: only works for us, gadm at the moment..
+    shpfile = naip.get_state_outline(state)
+    ras_paths = load_rasters(base_dir, timeframe, ras_name)
     means = []
     stds = []
     # then load in rasters
-    for raster in tqdm(training_ras, total=len(training_ras), desc=f"grabbing means of wc_30s_current bioclim rasters"):
+    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f"calculating means of {ras_name} bioclim rasters"):
         # load in raster
         src = rasterio.open(raster)
         # got to make sure it's all in the same crs
@@ -85,23 +85,22 @@ def get_bioclim_means(training_ras, shpfile, crs):
     return means, stds
 
 
-# TODO: turn rasters into data type instead of list
-def get_bioclim_rasters(base_dir=paths.RASTERS, train_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, state='mi'):
+
+def get_bioclim_rasters(base_dir=paths.RASTERS, ras_name='wc_30s_current', timeframe='current', crs=naip.CRS.BIOCLIM_CRS, out_range=(-1,1), state='mi'):
     # TODO: only works for us, gadm at the moment..
     shpfile = naip.get_state_outline(state)
-    # get current day rasters for adjusting means to training data
-    training_ras = load_rasters(train_dir)
     # first, get raster files
+    # always grabs standard WSG84 version which starts with b for bioclim
     ras_paths = load_rasters(base_dir, timeframe, ras_name)
-    # sort rasters to same order as training rasters
-    ras_paths = sort_rasters(training_ras, ras_paths)
-    # get means from bioclim used to train the model
-    means, stds = get_bioclim_means(training_ras, shpfile, crs)
+    # sort rasters to same order as current bioclim
+    ras_paths = sort_rasters(load_rasters(base_dir), ras_paths)
+    # get means from current bioclim (the default for this fn)
+    means, stds = get_bioclim_means()
     ras_agg = []
     transfs = []
     # then load in rasters
     i = 0
-    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f"prepping {ras_name} bioclim rasters"):
+    for raster in tqdm(ras_paths, total=len(ras_paths), desc=f" loading in {ras_name} bioclim rasters"):
         # load in raster
         src = rasterio.open(raster)
         # got to make sure it's all in the same crs
@@ -353,9 +352,9 @@ def save_data(daset, year, state, means, tr_clus, te_clus, sp, gen, fam, daset_i
 
 # gonna not do type hints for now, just put it in the docstring instead as it's too complicated with
 # the interpreter complaining...
-def compute_means_parallel(rasters, procid, lock, year: str, state: str, write_file):
+def calculate_means_parallel(rasters, procid, lock, year: str, write_file):
     """
-    compute_means_parallel
+    calculate_means_parallel g
 
     _extended_summary_
 
@@ -386,17 +385,17 @@ def compute_means_parallel(rasters, procid, lock, year: str, state: str, write_f
             prog.update(1)
     # write to file if set
     if write_file:
-        fname = f'{paths.MISC}{state}_means_{year}_{procid}.json'
+        fname = f'{paths.MISC}means_{year}_{procid}.json'
         with open(fname, 'w') as f:
             json.dump({'means' : means, 'stds' : stds, "files" : rasters }, f)
     with lock:
         prog.close()
     return means, stds
 
-def compute_means(tiff_dset_name, parallel, year, state, rasters=None, write_file=False):
+def calculate_means(tiff_dset_name, parallel, year, rasters=None, write_file=False):
    # Decision: going to do it across all satellite image, not all images in the dataset
     # load in previously generated means
-    f = f"{paths.MEANS}dataset_means.json"
+    f = f"{paths.OCCS}dataset_means.json"
     with open(f, 'r') as fp:
         daset_means =  json.load(fp)
     if rasters is None:
@@ -407,7 +406,7 @@ def compute_means(tiff_dset_name, parallel, year, state, rasters=None, write_fil
 # parallel process the rasters
     lock = multiprocessing.Manager().Lock()
     pool =  multiprocessing.Pool(parallel)
-    res_async = [pool.apply_async(compute_means_parallel, args=(ras, i, lock, year, state, write_file)) for i, ras in enumerate(ras_pars)]
+    res_async = [pool.apply_async(calculate_means_parallel, args=(ras, i, lock, year, write_file)) for i, ras in enumerate(ras_pars)]
     res_dfs = [r.get() for r in res_async]
     pool.close()
     pool.join()
@@ -422,8 +421,8 @@ def compute_means(tiff_dset_name, parallel, year, state, rasters=None, write_fil
     print(len(means), len(stds), mean.shape, std.shape)
     mean = mean.tolist()
     std = std.tolist()
-    daset_means[f"{state}_naip_{year}"]['means'] = mean
-    daset_means[f"{state}_naip_{year}"]['stds'] = std
+    daset_means[f"naip_{year}"]['means'] = mean
+    daset_means[f"naip_{year}"]['stds'] = std
     return daset_means
 
 def map_key(df, key, new_key=None):
@@ -591,6 +590,7 @@ def make_images(daset:gpd.GeoDataFrame, year, tiff_dset_name, idCol='gbifID'):
                 daset = daset.to_crs(src.crs)
                 # x, y = daset.loc[i].geometry.xy
             # else:
+            # TODO: should be obs, not daset.loc?? 
             # x, y = daset.loc[i].geometry.xy
             x, y = obs.geometry.xy
             # get the row/col starting location of the point in the raster
@@ -1004,9 +1004,10 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
     daset = gpd.sjoin(daset, shps, predicate='within')
     # remove leftover index from ca shapefile
     del daset['index_right']
-    # res magic number assures a radius of 256m for co-occurrence, duplicate obs filtering
-    # no matter underlying NAIP imagery resolution (tested to be better across years)
-    res = 1.0
+    # get resolution depending on what year it is
+    # before 2015 was 1 meter, after was 60 cm
+    # res = 1.0 if year in ['2012', '2014'] else 0.6
+    res = 1.0 # TODO: going to see if more adjacent species increases accuracy for later years
     # this boolean allows us to just add the images if we so desire
     # keep only the points inside of rasters
     rasters = get_bioclim_rasters(state=state)
@@ -1064,11 +1065,9 @@ def make_dataset(dset_path, daset_id, latname, loname, sep, year, state, thresho
     daset, sp,gen,fam = map_to_index(daset)
     # get the means for this naip dataset
     if calculate_means:
-        means = compute_means(tiff_dset_name, parallel, args.year, args.state)
+        means = calculate_means(tiff_dset_name, parallel, args.year)
     else:
-        f = f"{paths.MEANS}dataset_means.json"
-        with open(f, 'r') as fp:
-            means =  json.load(fp)
+        means = None
     # and finally save everything out to disk
     save_data(daset, year, state, means, train_clusters, test_clusters, sp, gen,fam, daset_id, count_spec, count_gen, count_fam, idCol, latname, loname, normalize, parallel, threshold, excl_dist)
 

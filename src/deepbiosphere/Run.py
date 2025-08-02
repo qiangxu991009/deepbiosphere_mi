@@ -104,7 +104,7 @@ def make_config(args, train_dset, shared_species):
     args.shared_species = shared_species
     # TODO: change to match pretraining (if applicable)
     args.image_stats = f'naip_{args.year}'
-    args.raster_order = train_dset.raster_order
+
     # save arguments
     path = f"{paths.MODELS}configs/{args.model}_{args.loss}_band{args.band}_{args.exp_id}.json"
     # if this is the first time building the config directory

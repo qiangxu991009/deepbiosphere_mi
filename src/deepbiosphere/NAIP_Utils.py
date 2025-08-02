@@ -282,13 +282,10 @@ def find_rasters_point(gdf, point, base_dir : str):
     rasters = [f"{base_dir}/{fman.APFONAME[:5]}/{'_'.join(fman.FileName.split('_')[:-1])}.tif" for _, fman in rasters.iterrows()]
     return rasters
 
-def find_rasters_polygon(gdf, polygon, base_dir, year=2012):
+def find_rasters_polygon(gdf, polygon, base_dir):
 
     rasters = gdf[gdf.intersects(polygon)]
-    if year == 2018: # whole filepath is saved for this year for some reason
-        rasters = [f"{base_dir}/{fman.APFONAME[:5]}/{fman.FileName}" for _, fman in rasters.iterrows()]
-    else:
-        rasters = [f"{base_dir}/{fman.APFONAME[:5]}/{'_'.join(fman.FileName.split('_')[:-1])}.tif" for _, fman in rasters.iterrows()]
+    rasters = [f"{base_dir}/{fman.APFONAME[:5]}/{'_'.join(fman.FileName.split('_')[:-1])}.tif" for _, fman in rasters.iterrows()]
     return rasters
 
 def find_rasters_gdf(raster_gdf, slice_gdf, base_dir):
@@ -400,6 +397,7 @@ def predict_model(dat,
             spec_names=None):
 
     
+
     dwidth, dheight = dat.shape[2], dat.shape[1]
     # generate starting indices for data convolved to new resolution
     i_ind = list(range(0, dwidth, res))
@@ -420,7 +418,6 @@ def predict_model(dat,
     # with float32 but we'll see
     result = np.full([n_specs, hig, wid],np.nan)
     if pred_specs is not None:
-        # indices of preds will map to order of pred_specs
         mapping = {s: i for s, i in zip(spec_names, range(len(spec_names)))}
         idxs = [mapping[i] for i in pred_specs] 
     else:
@@ -516,8 +513,8 @@ def predict_raster(raster,
                 impute_climate: bool = True, 
                 clim_rasters : List = None,
                 disable_tqdm : bool = False,
-                sat_res : int = None, # resolution of satellite imagery for prediction, in meters
-                pred_specs : List[str] = None): 
+                sat_res : int = None,
+                pred_specs : List[str] = None): # resolution of satellite imagery for prediction, in meters
 
     # typecheck prediction parameters
     pred_types = [Prediction[pred_type] for pred_type in pred_types]
@@ -537,6 +534,7 @@ def predict_raster(raster,
     use_climate = dataset.DataType[model_config.datatype] == dataset.DataType.JOINT_NAIP_BIOCLIM
     if (use_climate and (clim_rasters is None)):
         clim_rasters = build.get_bioclim_rasters(state=model_config.state)
+
     bioclim_ras = np.vstack([r[0] for r in clim_rasters]) if use_climate else None
     bioclim_transf = clim_rasters[0][1] if use_climate else None
     bioclim_crs = clim_rasters[0][3] if use_climate else None
@@ -547,7 +545,6 @@ def predict_raster(raster,
         crs = raster.crs
         if sat_res is not None:
             # convert to cm with /100
-            # TODO: make sure this is right??
             raster, affine = merge.merge([raster], res=(sat_res/100, sat_res/100))
         else:
             raster = raster.read()
@@ -602,6 +599,7 @@ def predict_raster(raster,
         pred = torch.softmax(pred, axis=0).numpy()
     else:
         pred = torch.sigmoid(pred).numpy()
+    
     # and save out predictions
     for pred_type in pred_types:
         # save species predictions
@@ -728,7 +726,6 @@ def get_specs_from_files(files):
         
 def save_tiff_per_species(save_dir,
                           save_name,
-                          loss_type,
                           preds,
                           transf,
                           crs,
@@ -753,13 +750,13 @@ def save_tiff_per_species(save_dir,
        # save out each species to file
         for pred, spec in zip(preds, spec_names):
             if not overwrite:
-                if check_file_exists(new_dir, f'{loss_type}_probability', spec.replace(' ', '_')):
+                if check_file_exists(new_dir, 'probability', spec.replace(' ', '_')):
                     continue
             # massage into correct dimensions for rasterio
             pred = np.expand_dims(pred, axis=0)
             files.append(save_tiff(
                 save_dir=new_dir,
-                save_name=f'{loss_type}_probability',
+                save_name='probability',
                 pred_type=spec.replace(' ', '_'),
                 preds=pred,
                 transf=transf,
@@ -771,15 +768,11 @@ def save_tiff_per_species(save_dir,
         
 
     else:
-        # species lining up w/ indices in preds only holds if order of pred_specs        
-        if len(pred_specs) == preds.shape[0]: # coming in from predict_raster, already filtered to species
-            mapping = {s: i for s, i in zip(pred_specs, range(len(pred_specs)))} 
-        else: # coming in from save_tif_per_species, need to filter to index
-            mapping = {s: i for s, i in zip(spec_names, range(len(spec_names)))}
-        assert max(mapping.values()) < preds.shape[0], f"mappings are {max(mapping.values())} while predictions are {preds.shape[0]}"
+        mapping = {s: i for s, i in zip(spec_names, range(len(spec_names)))}
+        assert len(mapping) == preds.shape[0]
         for spec in pred_specs:
             if not overwrite:
-                if check_file_exists(new_dir, f'{loss_type}_probability', spec.replace(' ', '_')):
+                if check_file_exists(new_dir, 'probability', spec.replace(' ', '_')):
                     continue
             specidx = mapping[spec]
             pred = preds[specidx,:,:]
@@ -787,7 +780,7 @@ def save_tiff_per_species(save_dir,
             pred = np.expand_dims(pred, axis=0)
             files.append(save_tiff(
                 save_dir=new_dir,
-                save_name=f'{loss_type}_probability',
+                save_name='probability',
                 pred_type=spec.replace(' ', '_'),
                 preds=pred,
                 transf=transf,
