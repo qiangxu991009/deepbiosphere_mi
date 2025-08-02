@@ -132,9 +132,13 @@ def parse_string_to_string(string):
     return split
 
 def parse_string_to_int(string):
-    string = string.replace("{", '').replace("}", "").replace("'", '').replace("[", '').replace("]", '').replace(")", '').replace("(", '')
-    split = string.split(", ")
-    return [int(s) for s in split]
+    #string = string.replace("{", '').replace("}", "").replace("'", '').replace("[", '').replace("]", '').replace(")", '').replace("(", '')
+    #split = string.split(", ")
+    #return [int(s) for s in split]
+    def parse_string_to_int(string):
+        import re
+        numbers = re.findall(r'np\.int64\((\d+)\)', string)
+        return [int(num) for num in numbers]
 
 def parse_string_to_float(string):
     string = string.replace("{", '').replace("}", "").replace("'", '').replace("[", '').replace("]", '').replace(")", '').replace("(", '')
