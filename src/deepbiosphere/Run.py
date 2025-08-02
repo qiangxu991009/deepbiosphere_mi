@@ -594,7 +594,7 @@ if __name__ == "__main__":
     args.add_argument('--batchsize', type=int, required=True, help='batch size')
     # optional args
     args.add_argument('--year', type=str, help='What year of imagery to use as training data', default='2012')
-    args.add_argument('--state', type=str, help='What state / region to train on', default='ca')
+    args.add_argument('--state', type=str, help='What state / region to train on', default='mi')
     args.add_argument('--band', type=int, default=-1, help='which band to use. -1 indicates that the spatial exclusion split of the data will be used')
     args.add_argument('--threshold', type=float, default=0.5, help='what threshold to use for presence/absence calculation')
     args.add_argument('--pretrain', type=str, help='What kind of pretraining to use', choices=tresnet.Pretrained.valid(), default='NONE')
