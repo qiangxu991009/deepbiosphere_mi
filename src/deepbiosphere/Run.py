@@ -35,7 +35,7 @@ import copy
 import argparse
 import datetime
 from tqdm import tqdm
-from datetime import date
+from datetime import date, datetime
 from csv import DictWriter
 from types import SimpleNamespace
 
@@ -493,7 +493,7 @@ def train_model(args, rng):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # set up summary writer using standard tensorboard logging directory format
-    log_dir = f"{paths.RUNS}/{datetime.now().strftime('%Y_%m_%d_%H-%M-%S')}_{socket.gethostname()}_"
+    log_dir = f"{paths.RUNS}/{datetime.now().strftime('%Y_%m_%d_%H-%M-%S')}_{socket.gethostname()}_{args.exp_id}"
     tb_writer = None if args.testing else SummaryWriter(log_dir=log_dir, comment=f"{args.exp_id}_allpoints")
 
     # re-set seed again since sometimes if different
@@ -545,7 +545,7 @@ def train_and_test_model(args, rng):
 
     loss = instantiate_loss(args, train_dset, device)
     # set up summary writer
-    log_dir = f"{paths.RUNS}/{datetime.now().strftime('%Y_%m_%d_%H-%M-%S')}_{socket.gethostname()}_"
+    log_dir = f"{paths.RUNS}/{datetime.now().strftime('%Y_%m_%d_%H-%M-%S')}_{socket.gethostname()}_{args.exp_id}"
     tb_writer = None if args.testing else SummaryWriter(comment=f"{args.exp_id}", log_dir=log_dir)
 
     # re-set seed again since sometimes if different

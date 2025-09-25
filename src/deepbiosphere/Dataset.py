@@ -59,7 +59,7 @@ class DatasetType(Enum, metaclass=utils.MetaEnum):
     
 # ---------- Data augmentations ---------- #
 
-def random_augment(self,img):
+def random_augment(img):
     aug_choice = random.sample(range(4),1)
     # first choice: tencrop augmentation
     if aug_choice == 0:
@@ -135,10 +135,9 @@ def parse_string_to_int(string):
     #string = string.replace("{", '').replace("}", "").replace("'", '').replace("[", '').replace("]", '').replace(")", '').replace("(", '')
     #split = string.split(", ")
     #return [int(s) for s in split]
-    def parse_string_to_int(string):
-        import re
-        numbers = re.findall(r'np\.int64\((\d+)\)', string)
-        return [int(num) for num in numbers]
+    import re
+    numbers = re.findall(r'np\.int64\((\d+)\)', string)
+    return [int(num) for num in numbers]
 
 def parse_string_to_float(string):
     string = string.replace("{", '').replace("}", "").replace("'", '').replace("[", '').replace("]", '').replace(")", '').replace("(", '')
@@ -240,7 +239,7 @@ class DeepbioDataset(TorchDataset):
         self.std = metadata.dataset_means[f"naip_{year}"]['stds']
         self.ids = daset[metadata.idCol]
         # only relevant for cases where remote sensing data used
-        self.augment = Augment[augment]
+        self.augment_type = augment
         # split data 
         # if band is >=0, means to use the banding split
         # if band = -1, then use the uniform spatial split
@@ -294,7 +293,17 @@ class DeepbioDataset(TorchDataset):
             return self.all_specs_single[idx], self.all_gens_single[idx], self.all_fams_single[idx], input_
         elif self.dataset_type is DatasetType.MULTI_SPECIES:
             return self.all_specs_multi[idx], self.all_gens_multi[idx], self.all_fams_multi[idx], input_
-    
+
+    def apply_augment(self, img):
+        if self.augment_type == 'NONE':
+            return torch.tensor(img)
+        elif self.augment_type == 'RANDOM':
+            return random_augment(img)
+        elif self.augment_type == 'FIVECROP':
+            return fivecrop_augment(img)
+        else:
+            return torch.tensor(img)
+
     def __getitem__(self, idx):
 
         # bioclim only
@@ -319,7 +328,7 @@ class DeepbioDataset(TorchDataset):
             # NAIP imagery is 0-255 ints
             img = utils.scale(img, out_range=(0,1), min_=0, max_=255)
             img = TF.normalize(torch.tensor(img), self.mean, self.std)
-            img = self.augment(img)
+            img = self.apply_augment(img)
             return self.batch_datatype(idx, (img, self.bioclim[idx]))
 
 
@@ -348,7 +357,7 @@ class OccurrenceDataset(TorchDataset):
         self.mean = metadata.dataset_means[f"naip_{year}"]['means']
         self.std = metadata.dataset_means[f"naip_{year}"]['stds']
         # only relevant for cases where remote sensing data used
-        self.augment = Augment[augment]
+        self.augment_type = augment
         self.len_dset = len(daset)
         print(f"{split} dataset has {self.len_dset} points")
         
@@ -425,7 +434,16 @@ class OccurrenceDataset(TorchDataset):
         # read data from a 256x256 window centered on observation
         image_crop = src.read(window=Window(yy-128, xx-128, 256, 256))
         return image_crop
-    
+    def apply_augment(self, img):
+        if self.augment_type == 'NONE':
+            return torch.tensor(img)
+        elif self.augment_type == 'RANDOM':
+            return random_augment(img)
+        elif self.augment_type == 'FIVECROP':
+            return fivecrop_augment(img)
+        else:
+            return torch.tensor(img)
+
     def __getitem__(self, idx):
 
         # bioclim only
@@ -435,7 +453,7 @@ class OccurrenceDataset(TorchDataset):
         # naip only
         elif self.datatype is DataType.NAIP:
             img = load_naip(idx)
-            # scale+normalize image
+            # scale+normalize imagec
             # NAIP imagery is 0-255 ints
             img = utils.scale(img, out_range=(0,1), min_=0, max_=255)
             img = TF.normalize(torch.tensor(img), self.mean, self.std)
@@ -448,5 +466,5 @@ class OccurrenceDataset(TorchDataset):
             # NAIP imagery is 0-255 ints
             img = utils.scale(img, out_range=(0,1), min_=0, max_=255)
             img = TF.normalize(torch.tensor(img), self.mean, self.std)
-            img = self.augment(img)
+            img = self.apply_augment(img)
             return self.batch_datatype(idx, (img, self.bioclim[idx]))

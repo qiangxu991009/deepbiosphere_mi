@@ -52,9 +52,9 @@ def load_rasters(base_dir, timeframe='current', ras_name='wc_30s_current'):
         raise FileNotFoundError(f"only {len(ras_paths)} files found for {ras_name}!")
     return ras_paths
     
-def sort_rasters(curr_clim, to_sort):
+def sort_rasters(corr_order, to_sort):
     sortedras = []
-    for cras in curr_clim:
+    for cras in corr_order:
         curr = cras.split('_')[-1]
         for sras in to_sort:
             if sras.split('_')[-1] == curr:
