@@ -318,7 +318,7 @@ class DeepbioDataset(TorchDataset):
             # NAIP imagery is 0-255 ints
             img = utils.scale(img, out_range=(0,1), min_=0, max_=255)
             img = TF.normalize(torch.tensor(img), self.mean, self.std)
-            img = self.augment(img)
+            img = self.apply_augment(img)
             return self.batch_datatype(idx, img)
         # both naip and bioclim
         elif self.datatype is DataType.JOINT_NAIP_BIOCLIM:
