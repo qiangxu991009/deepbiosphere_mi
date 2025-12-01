@@ -589,7 +589,7 @@ if __name__ == "__main__":
     args.add_argument('--lr', type=float, required=True, help='what learning rate to use')
     args.add_argument('--epochs', type=int, help='how many epochs to train the model for', required=True)
     args.add_argument('--model', type=str, required=True, help="what model to train", choices = mods.valid())
-    args.add_argument('--exp_id', type=str, required=True, help="expermient id")
+    args.add_argument('--exp_id', type=str, required=True, help="experiment id")
     args.add_argument('--loss', type=str, required=True, help='what loss function to use', choices=losses.valid())
     args.add_argument('--batchsize', type=int, required=True, help='batch size')
     # optional args
