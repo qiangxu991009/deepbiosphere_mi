@@ -51,7 +51,7 @@ CRS = SimpleNamespace(
     BIOCLIM_CRS ='EPSG:4326',
     NAIP_CRS_1 = 'EPSG:26916',
     NAIP_CRS_2 = 'EPSG:26917')
-    
+GBIF_CRS = CRS.GBIF_CRS
 # legal types of predictions to make
 # on a set of rasters
 class Prediction(Enum, metaclass=utils.MetaEnum):
