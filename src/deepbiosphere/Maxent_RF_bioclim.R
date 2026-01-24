@@ -123,7 +123,7 @@ run_rf <- function(bdir, data, clim, background, sname, sdm, dset_name, bname, t
   npres <- sum(dat$presence)
   if(npres == 0){
     print(paste("not enough observations for", sname, "!"))
-    next
+    return(NA)#next
   }
   nabs <-  nrow(dat) - npres
   # convert response to factor for classification
@@ -152,7 +152,7 @@ run_rf <- function(bdir, data, clim, background, sname, sdm, dset_name, bname, t
   fname <- paste0(dirr, sname, '_rf_stats.csv')
   write.csv(res, file=fname)
   # predict to all of california
-  projection <- dismo::predict(rfMod, clim) 
+  projection <- raster::predict(clim, rfMod, type = "prob", index = 2)
   # ## save raster file of probabilities of presence
   dirr <- paste0(bdir, sdm, '/', 'projections/', dset_name,'/', bname, '/')
   if (!dir.exists(dirr)){
@@ -164,7 +164,7 @@ run_rf <- function(bdir, data, clim, background, sname, sdm, dset_name, bname, t
   test_data <- as.data.frame(raster::extract(clim, test_dset))
   # 1 = presence, 0 = absence 
   # don't filter NA rows, need to keep same size to transfer idCol
-  preds <- as.data.frame(predict(rfMod, test_data, type='prob')) 
+  preds <- as.data.frame(randomForest:::predict.randomForest(rfMod, test_data, type='prob'))
   names(preds) <- c('absence', 'presence')
   preds[[idCol]] <- test_dset[[idCol]]
   dirr <- paste0(bdir, sdm,'/', 'predictions/', dset_name,'/', bname, '/')
@@ -257,7 +257,7 @@ run_biomod <- function(data, clim, background, bdir, sdm, dset_name, bname){
 suppressPackageStartupMessages(library(biomod2))
 suppressPackageStartupMessages(library(dismo))
 suppressPackageStartupMessages(library(randomForest))
-suppressPackageStartupMessages(library(rgeos))
+#suppressPackageStartupMessages(library(rgeos))
 suppressPackageStartupMessages(library(pryr))
 
 
@@ -270,7 +270,7 @@ library(reticulate)
 library(rJava)
 library(dismo)
 library(raster)
-library(rgeos)
+#library(rgeos)
 library(progress)
 library(foreach)
 library(randomForest)
@@ -305,6 +305,9 @@ Sys.unsetenv('DISPLAY')
 # dismo::maxent` that will aid in debugging
 # jar <- paste(system.file(package="dismo"), "/java/maxent.jar", sep='')
 
+#Sys.setenv(RETICULATE_CONDA = "C:/Users/Xu/anaconda3")
+use_condaenv("deepbiosphere", required = TRUE)
+py_run_string("import sys; sys.path.append(r'D:/deepbiosphere_mi/src')")
 
 # set up reticulate modules
 utils <- import("deepbiosphere.Utils", convert = FALSE)
@@ -415,6 +418,7 @@ test_specs <- unique(test_dset$species)
 print(paste(length(train_specs), " total species in train split, ",
             length(test_specs), " total species in test split, ",
             length(intersect(train_specs, test_specs)), " species shared"))
+# train_specs <- train_specs[1:5]
 # generate the test + train polygons for filtering occurrences and background
 poly <- build$generate_split_polygons()
 trains <- NA
@@ -472,7 +476,7 @@ GBIF_CRS <- py_to_r(naip$GBIF_CRS)
 bdir <- py_to_r(paths$BASELINES)
 lckname <- paste0(opt$sdm,'_' , opt$band, '_', opt$dset_name, '_lockfile')
 # capture and ignore the output from foreach 
-toignore <- foreach (i = 1:length(train_specs), .packages = c('plyr','filelock')) %dopar% {
+toignore <- foreach (i = 1:length(train_specs), .packages = c('plyr','filelock','raster','sp','dismo','randomForest'), .export = c('clim', 'train_dset', 'test_dset', 'bdir', 'opt', 'trains', 'GBIF_CRS')) %dopar% {
   
   bef <- Sys.time()
   spec <- train_specs[i]
@@ -489,24 +493,35 @@ toignore <- foreach (i = 1:length(train_specs), .packages = c('plyr','filelock')
   background <- tryCatch(get_background(bdir, data, clim, opt$nback, sname, 
                                         opt$dset_name, opt$band, trains, GBIF_CRS),
                          error = function(e) NA)
-  if (all(is.na(background))){
+  bad_bg <- is.null(background) ||
+          (length(background) == 1 && is.atomic(background) && is.na(background)) ||
+          (inherits(background, "data.frame") && nrow(background) == 0) ||
+          (inherits(background, "Spatial") && length(background) == 0)
+
+  if (bad_bg) {
     print(paste("background for species ", spec, " failed!"))
-    next
+    return(NULL)
   }
-  
+
   # remove background locations that are inside of the testing band
   # run maxent
   if (opt$sdm == 'maxent'){
     mod <- tryCatch(run_maxent(
           bdir, data, clim, background, sname, 
           opt$sdm, opt$dset_name, opt$band,opt$idCol),
-        error = function(e) NA)
+        error = function(e) {
+        message("[MAXENT ERROR][", sname, "] ", conditionMessage(e))
+        return(NA)
+  })
     # run random forest
   } else if(opt$sdm =='rf') {
     mod <- tryCatch(run_rf(
         bdir, data, clim, background, sname, opt$sdm, 
         opt$dset_name, opt$band, test_dset, opt$idCol),
-      error = function(e) NA)
+      error = function(e) {
+        message("[RF ERROR][", sname, "] ", conditionMessage(e))
+        return(NA)
+  })
     # run biomod
   } else {
     # https://stackoverflow.com/questions/22265191/segfault-when-using-doparallel-with-rcpp-module
@@ -518,8 +533,8 @@ toignore <- foreach (i = 1:length(train_specs), .packages = c('plyr','filelock')
   }
   # is this what's failing with dopar??
   if (all(is.na(mod))){
-    print(paste(sdm, " for ", sname, " failed!"))
-    next
+    print(paste(opt$sdm, " for ", sname, " failed!"))
+    return(NULL) #next
   }
   aft <- Sys.time()
   # acquire lock on timing file
@@ -560,7 +575,7 @@ timing <- as.data.frame(list(
   'dataset' = opt$dset_name,
   'band' = opt$band,
   'cores' = opt$ncpu,
-  'memory' = system('grep MemTotal /proc/meminfo', intern = TRUE)
+  'memory' = NA
 ))
 fname <- paste0(paths$BASELINES, 'time_profiling.csv')
 # if file does not exist, write headers
