@@ -271,7 +271,7 @@ def predict_rasters_parallel(procid : int,
                              sat_res : int = None,
                              impute_climate : bool = True,
                              clim_rasters : List = None,
-                             specs : List[str] = None,
+                             #specs : List[str] = None,
                              img_size : int = utils.IMG_SIZE,
                              pred_specs : List[str] = None):
 
@@ -354,7 +354,7 @@ def predict_rasters_list(pred_outline : gpd.GeoDataFrame,
     pred_outline = pred_outline.to_crs(naip_shp.crs)# TODO: Return this!! .dissolve()
     # messy, but how to grab the right directory for the imagery
     sat_res = 60 if pred_year >= 2016 else 100
-    imagery_dir = paths.SCRATCH+f"naip/{pred_year}/{cfg.state}_{sat_res}cm_{pred_year}"
+    imagery_dir = paths.SCRATCH+f"{cfg.state}_{sat_res}cm_{pred_year}"
     rasters = naip.find_rasters_polygon(naip_shp, pred_outline.geometry.iloc[0], imagery_dir)
     # if predictions already exist, ignore the pre-predicted files
     already_done = [r.split('/')[-1].split(f'_{pred_year}')[0] for r in glob.glob(f"{save_dir}*/*_raw*.tif")]
@@ -373,7 +373,7 @@ def predict_rasters_list(pred_outline : gpd.GeoDataFrame,
         ras_pars = utils.partition(rasters, n_processes)
         lock = multiprocessing.Manager().Lock()
         pool =  multiprocessing.Pool(n_processes)
-        res_async = [pool.apply_async(predict_rasters_parallel, args=(i, lock, ras, save_dir, cfg, device, batch_size, epoch, pred_year, pred_types, alpha_type, pred_res, sat_res, impute_climate, clim_rasters, pred_specs)) for i, ras in enumerate(ras_pars)]
+        res_async = [pool.apply_async(predict_rasters_parallel, args=(i, lock, ras, save_dir, cfg, device, batch_size, epoch, pred_year, pred_types, alpha_type, pred_res, sat_res, impute_climate, clim_rasters), kwds={'pred_specs': pred_specs}) for i, ras in enumerate(ras_pars)]
         res_files = [r.get() for r in res_async]
         pool.close()
         pool.join()
@@ -410,7 +410,7 @@ if __name__ == "__main__":
     args.add_argument('--loss', type=str, help='Loss function used to train mapmaking model', required=True, choices=losses.Loss.valid())
     args.add_argument('--architecture', type=str, help='Architecture of mapmaking model', required=True, choices=mods.Model.valid())
     args.add_argument('-sp','--species_to_predict', nargs='+', help='Which species to save prediction maps for, in style "Genus species"', default=None)
-    args.add_argument('--state', type=str, help='What state predictions are being made int', default='ca')
+    args.add_argument('--state', type=str, help='What state predictions are being made int', default='mi')
     args.add_argument('--epoch', type=int, help='what model epoch to use for making maps', required=True)
     args.add_argument('--batch_size', type=int, help='what size batch to use for making map inference', default=10)
     args.add_argument('--pred_resolution', type=int, help='what meter resolution to make map', default=utils.IMG_SIZE)
@@ -418,7 +418,7 @@ if __name__ == "__main__":
     args.add_argument('--device', type=int, help="Which CUDA device to use. Set -1 for CPU", default=-1)
     args.add_argument('--processes', type=int, help="How many worker processes to use for mapmaking", default=1)
     args.add_argument('--impute_climate', action='store_true', help="whether to impute the climate for locations with no bioclim coverage")
-    args.add_argument('--clim_ras', type=str, help='Which bioclim raster to use', default='current')
+    args.add_argument('--clim_ras', type=str, help='Which bioclim raster to use', default='wc_30s_current')
     args.add_argument('--clim_time', type=str, help='Whether to do future or current climate', default='current', choices =['current', 'future'])
     args.add_argument('--add_preds', action='store_true', help="add additional prediction types instead of making new predictions")
     args.add_argument('--overwrite', action='store_true', help="whether to overwrite existing files when calculating additional attributes")
@@ -451,6 +451,9 @@ if __name__ == "__main__":
     # else, just make full predictions
     else:
         cfg = run.load_config(**cnn)
+        cfg.clim_ras = args.clim_ras
+        cfg.clim_time = args.clim_time
+        cfg.state = args.state
         # read in polygon
         bound_shp = gpd.read_file(f"{paths.SHPFILES}{args.shape_pth}")
         predict_rasters_list(pred_outline = bound_shp,
