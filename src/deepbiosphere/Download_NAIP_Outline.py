@@ -17,7 +17,7 @@ def get_links_from_url(url):
         return []
 
 def crawl_and_download(url, relative_path=""):
-    print(f"🔍 正在访问: {url}")
+    print(f"{url}")
     links = get_links_from_url(url)
 
     for href in links:
@@ -27,15 +27,13 @@ def crawl_and_download(url, relative_path=""):
         filename = os.path.basename(urlparse(href).path)
         save_path = os.path.join(local_path, filename)
 
-        # 递归：如果是 index.html 说明可能还有下级目录
         if href.endswith("index.html") and href not in ("index.html", "../index.html"):
             sub_url = urljoin(url, href)
             sub_relative_path = os.path.join(relative_path, os.path.dirname(href))
             crawl_and_download(sub_url, sub_relative_path)
-        # 下载所有文件类型
         elif "." in filename:
             if os.path.exists(save_path):
-                print(f"  ⏩ 已存在: {save_path}")
+                print(f"{save_path}")
                 continue
             try:
                 print(f"  📥 Downloading: {full_url} → {save_path}")
@@ -48,7 +46,7 @@ def crawl_and_download(url, relative_path=""):
                 print(f"  [ERROR] Failed to download {filename}: {e}")
 
 if __name__ == "__main__":
-    print(f"🚀 Starting download from: {BASE_URL}")
-    print(f"📁 Saving to: {LOCAL_ROOT}")
+    print(f"tarting download from: {BASE_URL}")
+    print(f"Saving to: {LOCAL_ROOT}")
     crawl_and_download(BASE_URL)
-    print("✅ Done.")
+    print("Done.")
