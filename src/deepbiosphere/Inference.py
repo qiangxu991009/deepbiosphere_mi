@@ -28,14 +28,14 @@ from datetime import date
 from os.path import exists
 
 
-def load_baseline_preds(model, nobs, nspecs, sp2id, band='unif_train_test', dset_name='big_cali_2012'):
+def load_baseline_preds(model, nobs, nspecs, sp2id, band='unif_train_test', dset_name='mi_2012'):
     files = glob.glob(f"{paths.BASELINES}{model}/predictions/{dset_name}/{band}/*csv")
     if len(files) == 0:
         raise ValueError(f'no files for {model} baseline found!')
     results = np.zeros((nobs, nspecs))
     for file in tqdm(files):
         pred = pd.read_csv(file)
-        spec = file.split('/')[-1].split(f'_{model}_preds.csv')[0].replace('_', ' ')
+        spec = os.path.basename(file).split(f'_{model}_preds.csv')[0].replace('_', ' ')
         if model == 'maxent':
             # fill in predictions to be in same order as CNN model
             results[:,sp2id[spec]] = pred.pres_pred
@@ -94,7 +94,7 @@ def add_med_iqr(vals, df, row, col):
     df.at[row,col] = f"{round(med, 4)} [{round(q25,4)}-{round(q75, 4)}]"
 
 # ytrue: nobs, total_num_specs, multi_ytrue: nobs, num_overlapping_specs,  single_ytrue: nobs_with_overlapping_spec
-def evaluate_model(ytrue, pred, multi_ytrue, preds_multi, single_ytrue, preds_single, sharedspecs, sp2id, ids, dset_name, band, model, loss, lr, epoch, exp_id, pretrained, batch_size, write_obs=False, thres=0.5, filename=None):
+def evaluate_model(ytrue, pred, multi_ytrue, preds_multi, single_ytrue, preds_single, sharedspecs, sp2id, ids, dset_name, band, model, loss, lr, epoch, exp_id, pretrained, batch_size, write_obs=True, thres=0.5, filename=None):
     tick = time.time()
 
     # make directory if it doesn't exist
@@ -173,7 +173,7 @@ def evaluate_model(ytrue, pred, multi_ytrue, preds_multi, single_ytrue, preds_si
     for i in range(pred.shape[1]):
         if ytrue[:,i].sum() > 0:
             zone.append(utils.per_species_zero_one_accuracy(ytrue[:,i], pred[:,i], thres))
-            one.append(utils.per_species_one_accuracy(ytrue[:,i], pred[:,i], thres))
+            # one.append(utils.per_species_one_accuracy(ytrue[:,i], pred[:,i], thres))
         else:
             zone.append(np.nan)
             one.append(np.nan)
@@ -246,7 +246,7 @@ def evaluate_model(ytrue, pred, multi_ytrue, preds_multi, single_ytrue, preds_si
     tock = time.time()
     return (tock - tick)/60
 
-def run_baseline_inference(model, band=-1, dset_name='big_cali_2012', state='ca', year=2012, threshold=.5, fname=None, writeobs=True):
+def run_baseline_inference(model, band=-1, dset_name='mi_2012', state='mi', year=2012, threshold=.5, fname=None, writeobs=True):
 
     test_dset = dataset.DeepbioDataset(dset_name, 'BIOCLIM', 'MULTI_SPECIES', state, year, band, 'test', 'NONE')
     train_dset = dataset.DeepbioDataset(dset_name, 'BIOCLIM', 'MULTI_SPECIES', state, year, band, 'train', 'NONE', prep_onehots=False)
