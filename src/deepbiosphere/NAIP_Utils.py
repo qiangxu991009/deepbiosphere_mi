@@ -586,7 +586,7 @@ def predict_raster(raster,
                                                 bioclim_crs=bioclim_crs,
                                                 disable_tqdm=disable_tqdm,
                                                 pred_specs=pred_specs,
-                                                spec_names=spec_names if pred_specs is None else pred_specs)
+                                                spec_names=spec_names) #if pred_specs is None else pred_specs)
   
     files = []
     # convert to probabilities
@@ -606,7 +606,7 @@ def predict_raster(raster,
         if pred_type is Prediction.PER_SPEC:
             files += save_tiff_per_species(save_dir=save_dir,
                                         save_name=save_name,
-                                        loss_type=model_config.loss,
+                                        #loss_type=model_config.loss,
                                         preds=pred,
                                         transf=pred_aff,
                                         crs=crs,
@@ -765,18 +765,13 @@ def save_tiff_per_species(save_dir,
                 out_res=out_res,
                 bounds=bounds,
                 band_names=[spec.replace(' ', '_')]))
-        
-
+    ## use index to locate target species
     else:
-        mapping = {s: i for s, i in zip(spec_names, range(len(spec_names)))}
-        assert len(mapping) == preds.shape[0]
-        for spec in pred_specs:
+        for i, spec in enumerate(pred_specs):
             if not overwrite:
                 if check_file_exists(new_dir, 'probability', spec.replace(' ', '_')):
                     continue
-            specidx = mapping[spec]
-            pred = preds[specidx,:,:]
-            # massage into correct dimensions for rasterio
+            pred = preds[i, :, :]
             pred = np.expand_dims(pred, axis=0)
             files.append(save_tiff(
                 save_dir=new_dir,
@@ -788,9 +783,33 @@ def save_tiff_per_species(save_dir,
                 null_val=np.nan,
                 out_res=out_res,
                 bounds=bounds,
-                band_names=[spec.replace(' ', '_')]))    
+                band_names=[spec.replace(' ', '_')]))
     return files
-    
+    # else:
+    #     mapping = {s: i for s, i in zip(spec_names, range(len(pred_specs)))}
+    #     mapping = {s: i for i, s in enumerate(spec_names)}
+    #     assert len(mapping) == preds.shape[0]
+    #     for spec in pred_specs:
+    #         if not overwrite:
+    #             if check_file_exists(new_dir, 'probability', spec.replace(' ', '_')):
+    #                 continue
+    #         specidx = mapping[spec]
+    #         pred = preds[specidx,:,:]
+    #         # massage into correct dimensions for rasterio
+    #         pred = np.expand_dims(pred, axis=0)
+    #         files.append(save_tiff(
+    #             save_dir=new_dir,
+    #             save_name='probability',
+    #             pred_type=spec.replace(' ', '_'),
+    #             preds=pred,
+    #             transf=transf,
+    #             crs=crs,
+    #             null_val=np.nan,
+    #             out_res=out_res,
+    #             bounds=bounds,
+    #             band_names=[spec.replace(' ', '_')]))
+    # return files
+
 
 def check_file_exists(save_dir, save_name, pred_type):
     # same as save_tiff
